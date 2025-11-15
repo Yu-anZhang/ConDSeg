@@ -57,6 +57,8 @@ def evaluate(model, save_path, test_x, test_y, size):
 
         """ Image """
         image = cv2.imread(x, cv2.IMREAD_COLOR)
+        # Align inference preprocessing with training: convert BGR to RGB before normalization.
+        image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
         image = cv2.resize(image, size)
         save_img = image
         image = np.transpose(image, (2, 0, 1))

@@ -25,7 +25,7 @@ def my_seeding(seed):
 
 if __name__ == "__main__":
 
-    dataset_name= 'Kvasir-SEG'
+    dataset_name= 'Glas'
 
     val_name=None
 

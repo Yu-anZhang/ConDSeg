@@ -29,7 +29,7 @@ def my_seeding(seed):
 if __name__ == "__main__":
 
     # dataset
-    dataset_name = 'Kvasir-SEG'
+    dataset_name = 'Glas'
     val_name = None
 
     seed = 0
@@ -112,13 +112,15 @@ if __name__ == "__main__":
     model = ConDSeg()
 
     if pretrained_backbone:
-
-        saved_weights = torch.load(pretrained_backbone)
-
-        for name, param in model.named_parameters():
-            if name.startswith('layer0') or name.startswith('layer1') or name.startswith('layer2') or name.startswith(
-                    'layer3'):
-                param.data = saved_weights[name]
+        saved_state = torch.load(pretrained_backbone, map_location='cpu')
+        model_state = model.state_dict()
+        backbone_prefixes = ('layer0', 'layer1', 'layer2', 'layer3')
+        filtered_state = {
+            k: v for k, v in saved_state.items()
+            if k in model_state and k.startswith(backbone_prefixes)
+        }
+        model_state.update(filtered_state)
+        model.load_state_dict(model_state, strict=False)
 
     if resume_path:
         checkpoint = torch.load(resume_path, map_location='cpu')

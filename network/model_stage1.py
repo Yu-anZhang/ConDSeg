@@ -1,7 +1,7 @@
 import math
 import torch
 import torch.nn as nn
-from resnet import resnet50
+from network.resnet import resnet50  # Fix import to match package path when running from project root.
 import torch.nn.functional as F
 
 

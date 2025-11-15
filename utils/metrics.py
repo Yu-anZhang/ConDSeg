@@ -115,7 +115,7 @@ class DiceLoss(nn.Module):
         super(DiceLoss, self).__init__()
 
     def forward(self, inputs, targets, smooth=1):
-        inputs = torch.sigmoid(inputs)
+        # Fix double-sigmoid: model heads already apply sigmoid, so reuse raw probabilities here.
 
         inputs = inputs.view(-1)
         targets = targets.view(-1)
@@ -130,7 +130,7 @@ class DiceBCELoss(nn.Module):
         super(DiceBCELoss, self).__init__()
 
     def forward(self, inputs, targets, smooth=1):
-        inputs = torch.sigmoid(inputs)
+        # Fix double-sigmoid: model heads already apply sigmoid, so reuse raw probabilities here.
 
         inputs = inputs.view(-1)
         targets = targets.view(-1)
@@ -192,4 +192,3 @@ def mae(y_true, y_pred):
 
 def accuracy(y_true, y_pred):
     return np.mean(y_true == y_pred)
-

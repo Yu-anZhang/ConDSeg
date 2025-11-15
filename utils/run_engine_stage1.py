@@ -6,7 +6,7 @@ import torch.nn as nn
 from torch.utils.data import Dataset
 from torchvision import transforms
 
-from utils import calculate_metrics
+from utils.utils import calculate_metrics  # Fix module import path for stage1 engine.
 from tqdm import tqdm
 
 #
@@ -17,13 +17,23 @@ torch.backends.cudnn.deterministic = False
 import torch.nn.functional as F
 
 
+def _resolve_file(path, folder, name):
+    """
+    Fix strict extension handling: allow .jpg or .png files without hardcoding one suffix.
+    """
+    base = os.path.join(path, folder, name)
+    for ext in (".jpg", ".JPG", ".png", ".PNG"):
+        candidate = base + ext
+        if os.path.exists(candidate):
+            return candidate
+    raise FileNotFoundError(f"Could not find {name} with .jpg/.png under {folder}")
+
+
 def load_names(path, file_path):
     f = open(file_path, "r")
     data = f.read().split("\n")[:-1]
-    images = [os.path.join(path, "images", name) + ".jpg" for name in data]
-    masks = [os.path.join(path, "masks", name) + ".jpg" for name in data]
-    # images = [os.path.join(path, "images", name) + ".png" for name in data]
-    # masks = [os.path.join(path, "masks", name) + ".png" for name in data]
+    images = [_resolve_file(path, "images", name) for name in data]
+    masks = [_resolve_file(path, "masks", name) for name in data]
     return images, masks
 
 
@@ -59,6 +69,8 @@ class DATASET(Dataset):
         mask = cv2.imread(self.masks_path[index], cv2.IMREAD_GRAYSCALE)
         background = mask.copy()
         background = 255 - background
+        # Fix BGR/RGB mismatch: align OpenCV's BGR output with RGB expectation before normalization.
+        image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
 
         """ Applying Data Augmentation """
         if self.transform is not None:

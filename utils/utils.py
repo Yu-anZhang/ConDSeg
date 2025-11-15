@@ -5,7 +5,7 @@ import numpy as np
 import torch
 from skimage.measure import label, regionprops, find_contours
 from sklearn.utils import shuffle
-from metrics import precision, recall, F2, dice_score, jac_score
+from utils.metrics import precision, recall, F2, dice_score, jac_score  # Fix missing package import when running as module.
 from sklearn.metrics import accuracy_score
 
 """ Seeding the randomness. """
@@ -93,7 +93,6 @@ def calculate_metrics(y_true, y_pred):
     score_acc = accuracy_score(y_true, y_pred)
 
     return [score_jaccard, score_f1, score_recall, score_precision, score_acc, score_fbeta]
-
 
 
 
