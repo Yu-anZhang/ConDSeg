@@ -25,8 +25,13 @@ def my_seeding(seed):
 
 if __name__ == "__main__":
 
-    dataset_name= 'Glas'
+    dataset_name= 'Kvasir-SEG'
+    backbone_name = "resnet50"
+    #现在 stage1 支持这些主干：
+# resnet50,resnet101,resnet100,pvt_v2_b2
+# 说明：这里把 resnet100 作为 resnet101 的别名兼容了，因为标准 torchvision/这份仓库里没有单独的 ResNet100
 
+    pvt_pretrained_path = None
     val_name=None
 
     seed=random.randint(0,10000)
@@ -35,8 +40,8 @@ if __name__ == "__main__":
 
     image_size = 256
     size = (image_size, image_size)
-    batch_size = 8
-    num_epochs = 300
+    batch_size = 4
+    num_epochs = 80
     lr = 1e-4
     early_stopping_patience = 100
 
@@ -44,9 +49,9 @@ if __name__ == "__main__":
 
 
     current_time = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
-    folder_name = f"stage1_{dataset_name}_{val_name}_lr{lr}_{current_time}"
+    folder_name = f"stage1_{dataset_name}_{backbone_name}_{val_name}_lr{lr}_{current_time}"
 
-    base_dir = "../data"
+    base_dir = "./data"
     data_path = os.path.join(base_dir, dataset_name)
     save_dir = os.path.join("run_files", dataset_name, folder_name)
     if not os.path.exists(save_dir):
@@ -66,6 +71,9 @@ if __name__ == "__main__":
     hyperparameters_str = f"Image Size: {image_size}\nBatch Size: {batch_size}\nLR: {lr}\nEpochs: {num_epochs}\n"
     hyperparameters_str += f"Early Stopping Patience: {early_stopping_patience}\n"
     hyperparameters_str += f"Seed: {seed}\n"
+    hyperparameters_str += f"Backbone: {backbone_name}\n"
+    if pvt_pretrained_path:
+        hyperparameters_str += f"PVT Pretrained: {pvt_pretrained_path}\n"
     print_and_save(train_log_path, hyperparameters_str)
 
     """ Data augmentation: Transforms """
@@ -103,7 +111,7 @@ if __name__ == "__main__":
 
     """ Model """
     device = torch.device('cuda')
-    model = ConDSegStage1()
+    model = ConDSegStage1(backbone_name=backbone_name, pvt_pretrained_path=pvt_pretrained_path)
 
     if resume_path:
         checkpoint = torch.load(resume_path, map_location='cpu')
@@ -112,7 +120,7 @@ if __name__ == "__main__":
     model = model.to(device)
 
     optimizer = torch.optim.Adam(model.parameters(), lr=lr)
-    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, 'min', patience=30, verbose=True)
+    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, 'min', patience=30)
     loss_fn=DiceBCELoss()
     loss_name = "BCE Dice Loss"
     data_str = f"Optimizer: Adam\nLoss: {loss_name}\n"

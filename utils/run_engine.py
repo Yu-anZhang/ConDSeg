@@ -27,11 +27,11 @@ def _resolve_file(path, folder, name):
     Fix strict extension handling: allow .jpg or .png files without hardcoding one suffix.
     """
     base = os.path.join(path, folder, name)
-    for ext in (".jpg", ".JPG", ".png", ".PNG"):
+    for ext in (".jpg", ".JPG", ".png", ".PNG",".bmp",".BMP"):
         candidate = base + ext
         if os.path.exists(candidate):
             return candidate
-    raise FileNotFoundError(f"Could not find {name} with .jpg/.png under {folder}")
+    raise FileNotFoundError(f"Could not find {name} with .jpg/.png/.bmp under {folder}")
 
 
 def load_names(path, file_path):

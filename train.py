@@ -29,7 +29,7 @@ def my_seeding(seed):
 if __name__ == "__main__":
 
     # dataset
-    dataset_name = 'Glas'
+    dataset_name = 'ETIS' 
     val_name = None
 
     seed = 0
@@ -38,13 +38,13 @@ if __name__ == "__main__":
     # hyperparameters
     image_size = 256
     size = (image_size, image_size)
-    batch_size = 12
+    batch_size = 4
     num_epochs = 300
     lr = 1e-4
     lr_backbone = 1e-4
     early_stopping_patience = 100
 
-    pretrained_backbone = None
+    pretrained_backbone = './run_files/kvasir-SEG/stage1_kvasir-SEG_None_lr0.0001_20260208-204238/checkpoint.pth'
 
     resume_path = None
 
@@ -53,7 +53,7 @@ if __name__ == "__main__":
     folder_name = f"{dataset_name}_{val_name}_lr{lr}_{current_time}"
 
     # Directories
-    base_dir = "../data"
+    base_dir = "./data"
     data_path = os.path.join(base_dir, dataset_name)
     save_dir = os.path.join("run_files", dataset_name, folder_name)
     if not os.path.exists(save_dir):
@@ -144,7 +144,7 @@ if __name__ == "__main__":
     assert len(param_groups[1]['params']) > 0, "Rest group is empty!"
 
     optimizer = torch.optim.Adam(param_groups)
-    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, 'min', patience=30, verbose=True)
+    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, 'min', patience=30)
     loss_fn = DiceBCELoss()
     loss_name = "BCE Dice Loss"
     data_str = f"Optimizer: Adam\nLoss: {loss_name}\n"
