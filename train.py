@@ -136,8 +136,9 @@ if __name__ == "__main__":
     ]
 
     for name, param in model.named_parameters():
-        if name.startswith('layer0') or name.startswith('layer1') or name.startswith('layer2') or name.startswith(
-                'layer3'):
+        if name.startswith('layer0') or name.startswith('layer1'):
+            param.requires_grad = False
+        elif name.startswith('layer2') or name.startswith('layer3'):
             param_groups[0]['params'].append(param)
         else:
             param_groups[1]['params'].append(param)
@@ -146,7 +147,7 @@ if __name__ == "__main__":
     assert len(param_groups[1]['params']) > 0, "Rest group is empty!"
 
     optimizer = torch.optim.AdamW(param_groups, weight_decay=1e-4)
-    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, 'min', patience=30)
+    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=50, eta_min=1e-6)
     loss_fn = DiceBCELoss()
     loss_name = "BCE Dice Loss"
     data_str = f"Optimizer: Adam\nLoss: {loss_name}\n"
@@ -170,7 +171,7 @@ if __name__ == "__main__":
 
         train_loss, train_metrics = train(model, train_loader, optimizer, loss_fn, device)
         valid_loss, valid_metrics = evaluate(model, valid_loader, loss_fn, device)
-        scheduler.step(valid_loss)
+        scheduler.step()
 
         if valid_metrics[0] > best_valid_metrics:
             data_str = f"Valid mIoU improved from {best_valid_metrics:2.4f} to {valid_metrics[0]:2.4f}. Saving checkpoint: {checkpoint_path}"
