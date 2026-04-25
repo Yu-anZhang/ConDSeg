@@ -29,7 +29,7 @@ def my_seeding(seed):
 if __name__ == "__main__":
 
     # dataset
-    dataset_name = 'ETIS' 
+    dataset_name = 'Kvasir-SEG' 
     val_name = None
 
     seed = 0
@@ -38,13 +38,13 @@ if __name__ == "__main__":
     # hyperparameters
     image_size = 256
     size = (image_size, image_size)
-    batch_size = 4
+    batch_size = 8
     num_epochs = 300
     lr = 1e-4
-    lr_backbone = 1e-4
-    early_stopping_patience = 100
+    lr_backbone = 1e-5
+    early_stopping_patience = 40
 
-    pretrained_backbone = './run_files/kvasir-SEG/stage1_kvasir-SEG_None_lr0.0001_20260208-204238/checkpoint.pth'
+    pretrained_backbone = './run_files/Kvasir-SEG/stage1_Kvasir-SEG_resnet50_None_lr0.0001_20260424-230123/checkpoint.pth'
 
     resume_path = None
 
@@ -77,9 +77,11 @@ if __name__ == "__main__":
 
     """ Data augmentation: Transforms """
     transform = A.Compose([
-        A.Rotate(limit=35, p=0.3),
-        A.HorizontalFlip(p=0.3),
-        A.VerticalFlip(p=0.3),
+        A.ShiftScaleRotate(shift_limit=0.1, scale_limit=0.1, rotate_limit=35, p=0.5),
+        A.HorizontalFlip(p=0.5),
+        A.VerticalFlip(p=0.5),
+        A.RandomBrightnessContrast(brightness_limit=0.2, contrast_limit=0.2, p=0.3),
+        A.HueSaturationValue(hue_shift_limit=20, sat_shift_limit=30, val_shift_limit=20, p=0.3),
         A.CoarseDropout(p=0.3, max_holes=10, max_height=32, max_width=32)
     ])
 
@@ -143,7 +145,7 @@ if __name__ == "__main__":
     assert len(param_groups[0]['params']) > 0, "Layer group is empty!"
     assert len(param_groups[1]['params']) > 0, "Rest group is empty!"
 
-    optimizer = torch.optim.Adam(param_groups)
+    optimizer = torch.optim.AdamW(param_groups, weight_decay=1e-4)
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, 'min', patience=30)
     loss_fn = DiceBCELoss()
     loss_name = "BCE Dice Loss"

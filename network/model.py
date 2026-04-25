@@ -425,10 +425,11 @@ class ConDSeg(nn.Module):
 
         """ Contrast-Driven Feature Aggregation """
         self.up2X = nn.Upsample(scale_factor=2, mode="bilinear", align_corners=True)
-        self.cdfa4 = ContrastDrivenFeatureAggregation(128, 128, 4)
-        self.cdfa3 = ContrastDrivenFeatureAggregation(128 + 128, 128, 4)
-        self.cdfa2 = ContrastDrivenFeatureAggregation(128 + 128, 128, 4)
-        self.cdfa1 = ContrastDrivenFeatureAggregation(128 + 128, 128, 4)
+        drop_rate = 0.1
+        self.cdfa4 = ContrastDrivenFeatureAggregation(128, 128, 4, attn_drop=drop_rate, proj_drop=drop_rate)
+        self.cdfa3 = ContrastDrivenFeatureAggregation(128 + 128, 128, 4, attn_drop=drop_rate, proj_drop=drop_rate)
+        self.cdfa2 = ContrastDrivenFeatureAggregation(128 + 128, 128, 4, attn_drop=drop_rate, proj_drop=drop_rate)
+        self.cdfa1 = ContrastDrivenFeatureAggregation(128 + 128, 128, 4, attn_drop=drop_rate, proj_drop=drop_rate)
 
         """ Decoder """
         self.decoder_small = decoder_block(128, 128, scale=2)

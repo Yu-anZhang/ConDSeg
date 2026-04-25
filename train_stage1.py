@@ -34,13 +34,13 @@ if __name__ == "__main__":
     pvt_pretrained_path = None
     val_name=None
 
-    seed=random.randint(0,10000)
+    seed = 0
 
     my_seeding(seed)
 
     image_size = 256
     size = (image_size, image_size)
-    batch_size = 4
+    batch_size = 8
     num_epochs = 80
     lr = 1e-4
     early_stopping_patience = 100
@@ -79,9 +79,11 @@ if __name__ == "__main__":
     """ Data augmentation: Transforms """
 
     transform = A.Compose([
-        A.Rotate(limit=90, p=0.5),
+        A.ShiftScaleRotate(shift_limit=0.1, scale_limit=0.1, rotate_limit=90, p=0.5),
         A.HorizontalFlip(p=0.5),
         A.VerticalFlip(p=0.5),
+        A.RandomBrightnessContrast(brightness_limit=0.2, contrast_limit=0.2, p=0.3),
+        A.HueSaturationValue(hue_shift_limit=20, sat_shift_limit=30, val_shift_limit=20, p=0.3),
         A.CoarseDropout(p=0.3, max_holes=10, max_height=32, max_width=32)
     ])
 
@@ -119,7 +121,7 @@ if __name__ == "__main__":
 
     model = model.to(device)
 
-    optimizer = torch.optim.Adam(model.parameters(), lr=lr)
+    optimizer = torch.optim.AdamW(model.parameters(), lr=lr, weight_decay=1e-4)
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, 'min', patience=30)
     loss_fn=DiceBCELoss()
     loss_name = "BCE Dice Loss"
