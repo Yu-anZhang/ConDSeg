@@ -130,10 +130,14 @@ def train(model, loader, optimizer, loss_fn, device):
         loss_fg = loss_fn(fg_pred, y1)
         loss_bg = loss_fn(bg_pred, y2)
 
-        beta1 = 1 / (torch.tanh(fg_pred.sum() / (fg_pred.shape[2] * fg_pred.shape[3])) + 1e-15)
-        beta2 = 1 / (torch.tanh(bg_pred.sum() / (bg_pred.shape[2] * bg_pred.shape[3])) + 1e-15)
-        beta1 = beta1.to(device)
-        beta2 = beta2.to(device)
+        fg_ratio = y1.sum() / (y1.shape[0] * y1.shape[2] * y1.shape[3] + 1e-8)
+        bg_ratio = y2.sum() / (y2.shape[0] * y2.shape[2] * y2.shape[3] + 1e-8)
+        
+        beta1 = 1.0 / (torch.tanh(fg_ratio) + 1e-5)
+        beta2 = 1.0 / (torch.tanh(bg_ratio) + 1e-5)
+        
+        beta1 = torch.clamp(beta1, max=10.0).to(device)
+        beta2 = torch.clamp(beta2, max=10.0).to(device)
         preds = torch.stack([fg_pred, bg_pred, uc_pred], dim=1)
         probs = F.softmax(preds, dim=1)
         prob_fg, prob_bg, prob_uc = probs[:, 0], probs[:, 1], probs[:, 2]
@@ -144,7 +148,7 @@ def train(model, loader, optimizer, loss_fn, device):
         loss.backward()
 
         optimizer.step()
-        epoch_loss += loss.item()
+        epoch_loss += loss_mask.item()
 
         """ Calculate the metrics """
         batch_jac = []
@@ -194,10 +198,14 @@ def evaluate(model, loader, loss_fn, device):
             loss_fg = loss_fn(fg_pred, y1)
             loss_bg = loss_fn(bg_pred, y2)
 
-            beta1 = 1 / (torch.tanh(fg_pred.sum() / (fg_pred.shape[2] * fg_pred.shape[3])) + 1e-15)
-            beta2 = 1 / (torch.tanh(bg_pred.sum() / (bg_pred.shape[2] * bg_pred.shape[3])) + 1e-15)
-            beta1 = beta1.to(device)
-            beta2 = beta2.to(device)
+            fg_ratio = y1.sum() / (y1.shape[0] * y1.shape[2] * y1.shape[3] + 1e-8)
+            bg_ratio = y2.sum() / (y2.shape[0] * y2.shape[2] * y2.shape[3] + 1e-8)
+            
+            beta1 = 1.0 / (torch.tanh(fg_ratio) + 1e-5)
+            beta2 = 1.0 / (torch.tanh(bg_ratio) + 1e-5)
+            
+            beta1 = torch.clamp(beta1, max=10.0).to(device)
+            beta2 = torch.clamp(beta2, max=10.0).to(device)
 
             preds = torch.stack([fg_pred, bg_pred, uc_pred], dim=1)
             probs = F.softmax(preds, dim=1)
@@ -208,7 +216,7 @@ def evaluate(model, loader, loss_fn, device):
 
             loss = loss_mask + beta1 * loss_fg + beta2 * loss_bg + loss_comp
 
-            epoch_loss += loss.item()
+            epoch_loss += loss_mask.item()
 
             """ Calculate the metrics """
             batch_jac = []
