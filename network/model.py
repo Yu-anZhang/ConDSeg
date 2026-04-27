@@ -385,11 +385,12 @@ class CDFAPreprocess(nn.Module):
 
 
 class ConDSeg(nn.Module):
-    def __init__(self, H=256, W=256):
+    def __init__(self, H=256, W=256, use_sid_cdfa=True):
         super().__init__()
 
         self.H = H
         self.W = W
+        self.use_sid_cdfa = use_sid_cdfa
 
         """ Backbone: ResNet50 """
         backbone = resnet50()
@@ -404,32 +405,33 @@ class ConDSeg(nn.Module):
         self.dconv3 = dilated_conv(512, 128)
         self.dconv4 = dilated_conv(1024, 128)
 
-        """ Decouple Layer """
-        self.decouple_layer = DecoupleLayer(1024, 128)
-
-        """ Adjust the shape of decouple output """
-        self.preprocess_fg4 = CDFAPreprocess(128, 128, 1)  # 1/16
-        self.preprocess_bg4 = CDFAPreprocess(128, 128, 1)  # 1/16
-
-        self.preprocess_fg3 = CDFAPreprocess(128, 128, 2)  # 1/8
-        self.preprocess_bg3 = CDFAPreprocess(128, 128, 2)  # 1/8
-
-        self.preprocess_fg2 = CDFAPreprocess(128, 128,4)  # 1/4
-        self.preprocess_bg2 = CDFAPreprocess(128, 128, 4)  # 1/4
-
-        self.preprocess_fg1 = CDFAPreprocess(128, 128,8)  # 1/2
-        self.preprocess_bg1 = CDFAPreprocess(128, 128, 8)  # 1/2
-
-        """ Auxiliary Head """
-        self.aux_head = AuxiliaryHead(128)
-
-        """ Contrast-Driven Feature Aggregation """
-        self.up2X = nn.Upsample(scale_factor=2, mode="bilinear", align_corners=True)
-        drop_rate = 0.1
-        self.cdfa4 = ContrastDrivenFeatureAggregation(128, 128, 4, attn_drop=drop_rate, proj_drop=drop_rate)
-        self.cdfa3 = ContrastDrivenFeatureAggregation(128 + 128, 128, 4, attn_drop=drop_rate, proj_drop=drop_rate)
-        self.cdfa2 = ContrastDrivenFeatureAggregation(128 + 128, 128, 4, attn_drop=drop_rate, proj_drop=drop_rate)
-        self.cdfa1 = ContrastDrivenFeatureAggregation(128 + 128, 128, 4, attn_drop=drop_rate, proj_drop=drop_rate)
+        if self.use_sid_cdfa:
+            """ Decouple Layer """
+            self.decouple_layer = DecoupleLayer(1024, 128)
+            """ Adjust the shape of decouple output """
+            self.preprocess_fg4 = CDFAPreprocess(128, 128, 1)  # 1/16
+            self.preprocess_bg4 = CDFAPreprocess(128, 128, 1)  # 1/16
+            self.preprocess_fg3 = CDFAPreprocess(128, 128, 2)  # 1/8
+            self.preprocess_bg3 = CDFAPreprocess(128, 128, 2)  # 1/8
+            self.preprocess_fg2 = CDFAPreprocess(128, 128, 4)  # 1/4
+            self.preprocess_bg2 = CDFAPreprocess(128, 128, 4)  # 1/4
+            self.preprocess_fg1 = CDFAPreprocess(128, 128, 8)  # 1/2
+            self.preprocess_bg1 = CDFAPreprocess(128, 128, 8)  # 1/2
+            """ Auxiliary Head """
+            self.aux_head = AuxiliaryHead(128)
+            """ Contrast-Driven Feature Aggregation """
+            self.up2X = nn.Upsample(scale_factor=2, mode="bilinear", align_corners=True)
+            drop_rate = 0.1
+            self.cdfa4 = ContrastDrivenFeatureAggregation(128, 128, 4, attn_drop=drop_rate, proj_drop=drop_rate)
+            self.cdfa3 = ContrastDrivenFeatureAggregation(128 + 128, 128, 4, attn_drop=drop_rate, proj_drop=drop_rate)
+            self.cdfa2 = ContrastDrivenFeatureAggregation(128 + 128, 128, 4, attn_drop=drop_rate, proj_drop=drop_rate)
+            self.cdfa1 = ContrastDrivenFeatureAggregation(128 + 128, 128, 4, attn_drop=drop_rate, proj_drop=drop_rate)
+        else:
+            self.up2X = nn.Upsample(scale_factor=2, mode="bilinear", align_corners=True)
+            self.bypass_c4 = nn.Conv2d(128, 128, kernel_size=3, padding=1)
+            self.bypass_c3 = nn.Conv2d(128 + 128, 128, kernel_size=3, padding=1)
+            self.bypass_c2 = nn.Conv2d(128 + 128, 128, kernel_size=3, padding=1)
+            self.bypass_c1 = nn.Conv2d(128 + 128, 128, kernel_size=3, padding=1)
 
         """ Decoder """
         self.decoder_small = decoder_block(128, 128, scale=2)
@@ -453,31 +455,44 @@ class ConDSeg(nn.Module):
         d3 = self.dconv3(x3)
         d4 = self.dconv4(x4)
 
-        """ Decouple Layer """
-        f_fg, f_bg, f_uc = self.decouple_layer(x4)
-        """ Auxiliary Head """
-        mask_fg, mask_bg, mask_uc = self.aux_head(f_fg, f_bg, f_uc)
-
-        """ Contrast-Driven Feature Aggregation """
-        f_fg4 = self.preprocess_fg4(f_fg)
-        f_bg4 = self.preprocess_bg4(f_bg)
-        f_fg3 = self.preprocess_fg3(f_fg)
-        f_bg3 = self.preprocess_bg3(f_bg)
-        f_fg2 = self.preprocess_fg2(f_fg)
-        f_bg2 = self.preprocess_bg2(f_bg)
-        f_fg1 = self.preprocess_fg1(f_fg)
-        f_bg1 = self.preprocess_bg1(f_bg)
-
-        f4 = self.cdfa4(d4, f_fg4, f_bg4)
-        f4_up = self.up2X(f4)
-        f_4_3 = torch.cat([d3, f4_up], dim=1)
-        f3 = self.cdfa3(f_4_3, f_fg3, f_bg3)
-        f3_up = self.up2X(f3)
-        f_3_2 = torch.cat([d2, f3_up], dim=1)
-        f2 = self.cdfa2(f_3_2, f_fg2, f_bg2)
-        f2_up = self.up2X(f2)
-        f_2_1 = torch.cat([d1, f2_up], dim=1)
-        f1 = self.cdfa1(f_2_1, f_fg1, f_bg1)
+        if self.use_sid_cdfa:
+            """ Decouple Layer """
+            f_fg, f_bg, f_uc = self.decouple_layer(x4)
+            """ Auxiliary Head """
+            mask_fg, mask_bg, mask_uc = self.aux_head(f_fg, f_bg, f_uc)
+    
+            """ Contrast-Driven Feature Aggregation """
+            f_fg4 = self.preprocess_fg4(f_fg)
+            f_bg4 = self.preprocess_bg4(f_bg)
+            f_fg3 = self.preprocess_fg3(f_fg)
+            f_bg3 = self.preprocess_bg3(f_bg)
+            f_fg2 = self.preprocess_fg2(f_fg)
+            f_bg2 = self.preprocess_bg2(f_bg)
+            f_fg1 = self.preprocess_fg1(f_fg)
+            f_bg1 = self.preprocess_bg1(f_bg)
+    
+            f4 = self.cdfa4(d4, f_fg4, f_bg4)
+            f4_up = self.up2X(f4)
+            f_4_3 = torch.cat([d3, f4_up], dim=1)
+            f3 = self.cdfa3(f_4_3, f_fg3, f_bg3)
+            f3_up = self.up2X(f3)
+            f_3_2 = torch.cat([d2, f3_up], dim=1)
+            f2 = self.cdfa2(f_3_2, f_fg2, f_bg2)
+            f2_up = self.up2X(f2)
+            f_2_1 = torch.cat([d1, f2_up], dim=1)
+            f1 = self.cdfa1(f_2_1, f_fg1, f_bg1)
+        else:
+            mask_fg, mask_bg, mask_uc = None, None, None
+            f4 = self.bypass_c4(d4)
+            f4_up = self.up2X(f4)
+            f_4_3 = torch.cat([d3, f4_up], dim=1)
+            f3 = self.bypass_c3(f_4_3)
+            f3_up = self.up2X(f3)
+            f_3_2 = torch.cat([d2, f3_up], dim=1)
+            f2 = self.bypass_c2(f_3_2)
+            f2_up = self.up2X(f2)
+            f_2_1 = torch.cat([d1, f2_up], dim=1)
+            f1 = self.bypass_c1(f_2_1)
 
         """ Decoder """
         f_small = self.decoder_small(f2, f1)

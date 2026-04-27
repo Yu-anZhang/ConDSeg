@@ -108,7 +108,7 @@ def complementary_loss(prob_fg, prob_bg, prob_uc):
     normalized_loss = loss / num_pixels
     return normalized_loss
 
-def train(model, loader, optimizer, loss_fn, device):
+def train(model, loader, optimizer, loss_fn, device, use_sid_cdfa=True, use_sid_loss=True):
     model.train()
 
     epoch_loss = 0.0
@@ -127,29 +127,34 @@ def train(model, loader, optimizer, loss_fn, device):
         mask_pred, fg_pred, bg_pred, uc_pred = model(x)
 
         loss_mask = loss_fn(mask_pred, y1)
-        loss_fg = loss_fn(fg_pred, y1)
-        loss_bg = loss_fn(bg_pred, y2)
-
-        fg_ratio = y1.sum() / (y1.shape[0] * y1.shape[2] * y1.shape[3] + 1e-8)
-        bg_ratio = y2.sum() / (y2.shape[0] * y2.shape[2] * y2.shape[3] + 1e-8)
         
-        beta1 = 1.0 / (torch.tanh(fg_ratio) + 1e-5)
-        beta2 = 1.0 / (torch.tanh(bg_ratio) + 1e-5)
-        
-        beta1 = torch.clamp(beta1, max=10.0).to(device)
-        beta2 = torch.clamp(beta2, max=10.0).to(device)
-        preds = torch.stack([fg_pred, bg_pred, uc_pred], dim=1)
-        probs = F.softmax(preds, dim=1)
-        prob_fg, prob_bg, prob_uc = probs[:, 0], probs[:, 1], probs[:, 2]
+        if use_sid_cdfa and use_sid_loss:
+            loss_fg = loss_fn(fg_pred, y1)
+            loss_bg = loss_fn(bg_pred, y2)
+    
+            fg_ratio = y1.sum() / (y1.shape[0] * y1.shape[2] * y1.shape[3] + 1e-8)
+            bg_ratio = y2.sum() / (y2.shape[0] * y2.shape[2] * y2.shape[3] + 1e-8)
+            
+            beta1 = 1.0 / (torch.tanh(fg_ratio) + 1e-5)
+            beta2 = 1.0 / (torch.tanh(bg_ratio) + 1e-5)
+            
+            beta1 = torch.clamp(beta1, max=10.0).to(device)
+            beta2 = torch.clamp(beta2, max=10.0).to(device)
+            preds = torch.stack([fg_pred, bg_pred, uc_pred], dim=1)
+            probs = F.softmax(preds, dim=1)
+            prob_fg, prob_bg, prob_uc = probs[:, 0], probs[:, 1], probs[:, 2]
+    
+            loss_comp = complementary_loss(prob_fg, prob_bg, prob_uc)
+            loss_comp = loss_comp.to(device)
+            loss = loss_mask + beta1 * loss_fg + beta2 * loss_bg + loss_comp
+        else:
+            loss = loss_mask
 
-        loss_comp = complementary_loss(prob_fg, prob_bg, prob_uc)
-        loss_comp = loss_comp.to(device)
-        loss = loss_mask + beta1 * loss_fg + beta2 * loss_bg + loss_comp
         loss.backward()
 
         optimizer.step()
-        epoch_loss += loss_mask.item()
-
+        # epoch_loss += loss.item()
+        epoch_loss += loss_mask.item() 
         """ Calculate the metrics """
         batch_jac = []
         batch_f1 = []
@@ -177,7 +182,7 @@ def train(model, loader, optimizer, loss_fn, device):
     return epoch_loss, [epoch_jac, epoch_f1, epoch_recall, epoch_precision]
 
 
-def evaluate(model, loader, loss_fn, device):
+def evaluate(model, loader, loss_fn, device, use_sid_cdfa=True, use_sid_loss=True):
     model.eval()
 
     epoch_loss = 0.0
@@ -195,29 +200,34 @@ def evaluate(model, loader, loss_fn, device):
             mask_pred, fg_pred, bg_pred, uc_pred = model(x)
 
             loss_mask = loss_fn(mask_pred, y1)
-            loss_fg = loss_fn(fg_pred, y1)
-            loss_bg = loss_fn(bg_pred, y2)
-
-            fg_ratio = y1.sum() / (y1.shape[0] * y1.shape[2] * y1.shape[3] + 1e-8)
-            bg_ratio = y2.sum() / (y2.shape[0] * y2.shape[2] * y2.shape[3] + 1e-8)
             
-            beta1 = 1.0 / (torch.tanh(fg_ratio) + 1e-5)
-            beta2 = 1.0 / (torch.tanh(bg_ratio) + 1e-5)
-            
-            beta1 = torch.clamp(beta1, max=10.0).to(device)
-            beta2 = torch.clamp(beta2, max=10.0).to(device)
-
-            preds = torch.stack([fg_pred, bg_pred, uc_pred], dim=1)
-            probs = F.softmax(preds, dim=1)
-            prob_fg, prob_bg, prob_uc = probs[:, 0], probs[:, 1], probs[:, 2]
-
-            loss_comp = complementary_loss(prob_fg, prob_bg, prob_uc)
-            loss_comp = loss_comp.to(device)
-
-            loss = loss_mask + beta1 * loss_fg + beta2 * loss_bg + loss_comp
+            if use_sid_cdfa and use_sid_loss:
+                loss_fg = loss_fn(fg_pred, y1)
+                loss_bg = loss_fn(bg_pred, y2)
+    
+                fg_ratio = y1.sum() / (y1.shape[0] * y1.shape[2] * y1.shape[3] + 1e-8)
+                bg_ratio = y2.sum() / (y2.shape[0] * y2.shape[2] * y2.shape[3] + 1e-8)
+                
+                beta1 = 1.0 / (torch.tanh(fg_ratio) + 1e-5)
+                beta2 = 1.0 / (torch.tanh(bg_ratio) + 1e-5)
+                
+                beta1 = torch.clamp(beta1, max=10.0).to(device)
+                beta2 = torch.clamp(beta2, max=10.0).to(device)
+    
+                preds = torch.stack([fg_pred, bg_pred, uc_pred], dim=1)
+                probs = F.softmax(preds, dim=1)
+                prob_fg, prob_bg, prob_uc = probs[:, 0], probs[:, 1], probs[:, 2]
+    
+                loss_comp = complementary_loss(prob_fg, prob_bg, prob_uc)
+                loss_comp = loss_comp.to(device)
+    
+                loss = loss_mask + beta1 * loss_fg + beta2 * loss_bg + loss_comp
+            else:
+                loss = loss_mask
 
             epoch_loss += loss_mask.item()
-
+            #epoch_loss += loss.item()
+            
             """ Calculate the metrics """
             batch_jac = []
             batch_f1 = []

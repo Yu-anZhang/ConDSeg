@@ -1,4 +1,5 @@
 import os
+import argparse
 import random
 import time
 import datetime
@@ -27,6 +28,14 @@ def my_seeding(seed):
 
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--disable_sid_cdfa', action='store_true', help="Bypass SID and CDFA modules")
+    parser.add_argument('--disable_sid_loss', action='store_true', help="Disable SID auxiliary losses (beta and complementary loss)")
+    parser.add_argument('--pretrained_type', type=str, choices=['imagenet', 'stage1'], default='stage1', help="Pretrained weights for backbone")
+    args = parser.parse_args()
+
+    use_sid_cdfa = not args.disable_sid_cdfa
+    use_sid_loss = not args.disable_sid_loss
 
     # dataset
     dataset_name = 'Kvasir-SEG' 
@@ -44,13 +53,17 @@ if __name__ == "__main__":
     lr_backbone = 1e-5
     early_stopping_patience = 40
 
-    pretrained_backbone = './run_files/Kvasir-SEG/stage1_Kvasir-SEG_resnet50_None_lr0.0001_20260424-230123/checkpoint.pth'
+    if args.pretrained_type == 'stage1':
+        pretrained_backbone = './run_files/Kvasir-SEG/stage1_Kvasir-SEG_resnet50_None_lr0.0001_20260424-230123/checkpoint.pth'
+    else:
+        pretrained_backbone = None
 
     resume_path = None
 
     # make a folder
     current_time = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
-    folder_name = f"{dataset_name}_{val_name}_lr{lr}_{current_time}"
+    ablation_str = f"Init-{args.pretrained_type}_{'NoSID' if args.disable_sid_cdfa else 'WithSID'}_{'NoSIDLoss' if args.disable_sid_loss else 'WithSIDLoss'}"
+    folder_name = f"{dataset_name}_{val_name}_{ablation_str}_lr{lr}_{current_time}"
 
     # Directories
     base_dir = "./data"
@@ -80,9 +93,9 @@ if __name__ == "__main__":
         A.ShiftScaleRotate(shift_limit=0.1, scale_limit=0.1, rotate_limit=35, p=0.5),
         A.HorizontalFlip(p=0.5),
         A.VerticalFlip(p=0.5),
-        A.RandomBrightnessContrast(brightness_limit=0.2, contrast_limit=0.2, p=0.3),
-        A.HueSaturationValue(hue_shift_limit=20, sat_shift_limit=30, val_shift_limit=20, p=0.3),
-        A.CoarseDropout(p=0.3, max_holes=10, max_height=32, max_width=32)
+        A.RandomBrightnessContrast(brightness_limit=0.2, contrast_limit=0.2, p=0.3), # 添加随机亮度和对比度调整
+        A.HueSaturationValue(hue_shift_limit=20, sat_shift_limit=30, val_shift_limit=20, p=0.3), # 添加色调、饱和度和亮度的随机调整
+        A.CoarseDropout(p=0.3, max_holes=10, max_height=32, max_width=32) #添加CoarseDropout进行随机擦除数据增强
     ])
 
     """ Dataset """
@@ -111,7 +124,7 @@ if __name__ == "__main__":
 
     """ Model """
     device = torch.device('cuda')
-    model = ConDSeg()
+    model = ConDSeg(use_sid_cdfa=use_sid_cdfa)
 
     if pretrained_backbone:
         saved_state = torch.load(pretrained_backbone, map_location='cpu')
@@ -150,7 +163,7 @@ if __name__ == "__main__":
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=50, eta_min=1e-6)
     loss_fn = DiceBCELoss()
     loss_name = "BCE Dice Loss"
-    data_str = f"Optimizer: Adam\nLoss: {loss_name}\n"
+    data_str = f"Optimizer: AdamW\nLoss: {loss_name}\n"
     print_and_save(train_log_path, data_str)
 
     num_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
@@ -169,8 +182,8 @@ if __name__ == "__main__":
     for epoch in range(num_epochs):
         start_time = time.time()
 
-        train_loss, train_metrics = train(model, train_loader, optimizer, loss_fn, device)
-        valid_loss, valid_metrics = evaluate(model, valid_loader, loss_fn, device)
+        train_loss, train_metrics = train(model, train_loader, optimizer, loss_fn, device, use_sid_cdfa, use_sid_loss)
+        valid_loss, valid_metrics = evaluate(model, valid_loader, loss_fn, device, use_sid_cdfa, use_sid_loss)
         scheduler.step()
 
         if valid_metrics[0] > best_valid_metrics:
